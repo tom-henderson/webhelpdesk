@@ -38,27 +38,63 @@ class WebHelpDesk(object):
     def _api_request(self, path, args={}):
         url = "%s/%s" % (self.helpdesk_url, path)
         args['apiKey'] = self.apikey
+
         if self.debug:
-            print url, args
+            print "Url:", url
+            print "Args", args
         result = requests.get(url, params=args)
+
+        if self.debug:
+            print "============="
+            pprint(result.__dict__)
+            print "============="
+
+        if result.status_code != 200:
+            self._handle_error(result)
+            return []
+        
+        return result.json()
+
+    def _handle_error(self, result):
+        # Just print out the response object
         if self.debug:
             pprint(result.__dict__)
-        return result.json()
+        else:
+            return False
 
     def ticket(self, id):
         return self._api_request("Tickets/%d" % id)
 
-    def tickets(self, qualifier="(statustype.statusTypeName!='resolved')and(statustype.statusTypeName!='closed')and(statustype.statusTypeName!='cancelled')and(deleted!=1)"):
-        # status not Resolved and not Closed and not Cancelled and deleted not 1
+    def tickets(self, closed=False, cancelled=False, resolved=False, deleted=False, qualifier=None):
+        _qualifiers=[]
+        if not closed:
+            _qualifiers.append("(statustype.statusTypeName!='closed')")
+        if not cancelled:
+            _qualifiers.append("(statustype.statusTypeName!='cancelled')")
+        if not resolved:
+            _qualifiers.append("(statustype.statusTypeName!='resolved')")
+        if not deleted:
+            _qualifiers.append("(deleted!=1)")
+
+        if qualifier is not None:
+            qualifier = "((%s)and(%s))" % (qualifier, "and".join(_qualifiers))
+        else:
+            qualifier = "(%s)" % "and".join(_qualifiers)
+
+        if self.debug:
+            print "Using qualifier:", qualifier
+        
         args = {'qualifier': qualifier,
                 'limit': 100,
+                'style': 'detailed',
                 'page': 1}
         result = []
         result.append(self._api_request("Tickets", args=args))
         while len(result[args['page']-1]) == args['limit']:
             args['page'] += 1
             result.append(self._api_request("Tickets", args=args))
-        return result
+
+        return [ticket for page in result for ticket in page]
 
     def ticket_notes(self, id):
         args = {'jobTicketId': id}
@@ -181,34 +217,42 @@ class WebHelpDesk(object):
             self._models = self._api_request("Models")
         return self._models
 
-    def test(self):
+    def test(self, debug=False):
+        _current_debug = self.debug
+        if self.debug and not debug:
+            print "Disabling debug. Enable explicitly with helpdesk.test(debug=True)"
+            self.debug = False
+
         print "Test List Retreval"
-        print " tickets", self.tickets()
-        print " ticket_notes (ticket 1)", self.ticket_notes(1)
-        print " billing_rates", self.billing_rates
-        print " techs", self.techs
-        print " clients", self.clients
-        print " priority_types", self.priority_types
-        print " request_types", self.request_types
-        print " status_types", self.status_types
-        print " departments", self.departments
-        print " locations", self.locations
-        print " rooms", self.rooms
-        print " bulk_actions", self.bulk_actions
-        print " custom_field_definitions", self.custom_field_definitions
-        print " setup", self.setup
-        print " assets", self.assets
-        print " asset_statuses", self.asset_statuses
-        print " asset_types", self.asset_types
-        print " manufacturers", self.manufacturers
-        print " models", self.models
+        print " tickets:", len(self.tickets())
+        print " ticket_notes (ticket 1):", len(self.ticket_notes(1))
+        print " billing_rates:", len(self.billing_rates)
+        print " techs:", len(self.techs)
+        print " clients:", len(self.clients)
+        print " priority_types:", len(self.priority_types)
+        print " request_types:", len(self.request_types)
+        print " status_types:", len(self.status_types)
+        print " departments:", len(self.departments)
+        print " locations:", len(self.locations)
+        print " rooms:", len(self.rooms)
+        print " bulk_actions:", len(self.bulk_actions)
+        print " custom_field_definitions:", len(self.custom_field_definitions)
+        print " setup:", len(self.setup)
+        print " assets:", len(self.assets)
+        print " asset_statuses:", len(self.asset_statuses)
+        print " asset_types:", len(self.asset_types)
+        print " manufacturers:", len(self.manufacturers)
+        print " models:", len(self.models)
         print
         print "Test Item Retreval"
-        print " ticket 1", self.ticket(1)
-        print " tech 1", self.tech(1)
-        print " client 1", self.client(1)
-        print " department 1", self.department(1)
-        print " location 1", self.location(1)
-        print " room 1", self.room(1)
+        print " ticket 1:", len(self.ticket(1))
+        print " tech 1:", len(self.tech(1))
+        print " client 1:", len(self.client(1))
+        print " department 1:", len(self.department(1))
+        print " location 1:", len(self.location(1))
+        print " room 1:", len(self.room(1))
 
+        if _current_debug:
+            "Turning debug back on"
+            self.debug = True
 
